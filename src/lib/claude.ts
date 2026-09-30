@@ -6,6 +6,7 @@
 //   4. logs tokens + cost to `llm_calls`.
 import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
+import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import { env } from "./env";
 import { db, check } from "./db";
@@ -36,13 +37,19 @@ export type AskOptions<S extends z.ZodType> = {
   ids?: LinkIds;
 };
 
-export async function askStructured<S extends z.ZodType>(opts: AskOptions<S>): Promise<z.infer<S>> {
-  const content: Anthropic.Beta.BetaTextBlockParam[] = [];
-  if (opts.profileBlock) {
+/** Profile block (cached) then job block (not cached). Same order everywhere so caching works. */
+function buildContent(profileBlock: string | undefined, userBlock: string): Anthropic.TextBlockParam[] {
+  const content: Anthropic.TextBlockParam[] = [];
+  if (profileBlock) {
     // The cache breakpoint covers everything before it too (system + profile).
-    content.push({ type: "text", text: opts.profileBlock, cache_control: { type: "ephemeral" } });
+    content.push({ type: "text", text: profileBlock, cache_control: { type: "ephemeral" } });
   }
-  content.push({ type: "text", text: opts.userBlock });
+  content.push({ type: "text", text: userBlock });
+  return content;
+}
+
+export async function askStructured<S extends z.ZodType>(opts: AskOptions<S>): Promise<z.infer<S>> {
+  const content = buildContent(opts.profileBlock, opts.userBlock);
 
   const useFallback = supportsServerFallback(opts.model);
 
@@ -75,6 +82,36 @@ export async function askStructured<S extends z.ZodType>(opts: AskOptions<S>): P
 
   // Second check with the full Zod schema (ranges, formats, etc.).
   return opts.schema.parse(res.parsed_output);
+}
+
+// ---------------------------------------------------------------------------
+// Message Batches (50% cheaper, results within ~1 hour, max 24 hours).
+// The batch API has no parse() helper, so we send the same JSON schema ourselves
+// and validate each result with Zod when we collect it.
+// ---------------------------------------------------------------------------
+
+export type BatchRequestOptions<S extends z.ZodType> = Omit<AskOptions<S>, "purpose" | "ids"> & { customId: string };
+
+export function batchRequest<S extends z.ZodType>(opts: BatchRequestOptions<S>): Anthropic.Messages.BatchCreateParams.Request {
+  const { type, schema } = zodOutputFormat(opts.schema); // drop the parse() function
+  return {
+    custom_id: opts.customId,
+    params: {
+      model: opts.model,
+      max_tokens: opts.maxTokens ?? 16000,
+      system: opts.system,
+      messages: [{ role: "user", content: buildContent(opts.profileBlock, opts.userBlock) }],
+      output_config: { format: { type, schema }, ...(opts.effort ? { effort: opts.effort } : {}) },
+    },
+  };
+}
+
+/** Validates one succeeded batch message. Throws with a clear reason if it can't be used. */
+export function parseBatchMessage<S extends z.ZodType>(message: Anthropic.Message, schema: S): z.infer<S> {
+  if (message.stop_reason === "refusal") throw new Error("Claude declined this request (stop_reason: refusal)");
+  if (message.stop_reason === "max_tokens") throw new Error("Claude's answer was cut off (max_tokens)");
+  const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+  return schema.parse(JSON.parse(text));
 }
 
 type UsageLike = {

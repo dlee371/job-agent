@@ -4,7 +4,7 @@ import { htmlToText } from "@/lib/text";
 import { mapGreenhouseJob } from "@/sources/greenhouse";
 import { mapLeverPosting } from "@/sources/lever";
 import { mapAshbyJob } from "@/sources/ashby";
-import { mapJSearchJob } from "@/sources/jsearch";
+import { jsearchJobs, mapJSearchJob } from "@/sources/jsearch";
 import { mapAdzunaJob } from "@/sources/adzuna";
 import { buildQueries } from "@/sources/queries";
 
@@ -110,6 +110,22 @@ describe("mapJSearchJob", () => {
     expect(r.listing.location).toBe("Austin, TX");
     expect(r.listing.salaryMax).toBe(100000);
     expect(r.boards).toEqual([{ name: "Acme", ats: "greenhouse", boardToken: "acme" }]);
+  });
+  it("falls back to the Google Jobs link when only LinkedIn is offered", () => {
+    const r = mapJSearchJob({
+      job_id: "e1",
+      job_title: "Entry-Level Software Developer",
+      employer_name: "Epic",
+      apply_options: [{ publisher: "LinkedIn", apply_link: "https://www.linkedin.com/jobs/view/9", is_direct: false }],
+      job_google_link: "https://www.google.com/search?q=epic+jobs&ibp=htl;jobs",
+    })!;
+    expect(r.listing.applyUrl).toBe("https://www.google.com/search?q=epic+jobs&ibp=htl;jobs");
+    expect(r.listing.ats).toBe("other");
+  });
+  it("reads both the v1 and v2 response shapes", () => {
+    expect(jsearchJobs([{ a: 1 }])).toEqual([{ a: 1 }]);
+    expect(jsearchJobs({ jobs: [{ a: 1 }], cursor: "x" })).toEqual([{ a: 1 }]);
+    expect(jsearchJobs(null)).toEqual([]);
   });
   it("ignores hourly salaries", () => {
     const r = mapJSearchJob({ job_id: "x", job_title: "T", employer_name: "E", job_min_salary: 25, job_salary_period: "HOUR" })!;

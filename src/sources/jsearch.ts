@@ -19,6 +19,7 @@ const JSearchJob = z.object({
   job_description: z.string().nullish(),
   job_apply_link: z.string().nullish(),
   job_apply_is_direct: z.boolean().nullish(),
+  job_google_link: z.string().nullish(),
   apply_options: z
     .array(z.object({ publisher: z.string().nullish(), apply_link: z.string(), is_direct: z.boolean().nullish() }))
     .nullish(),
@@ -55,6 +56,9 @@ export function mapJSearchJob(raw: unknown): { listing: JobListing; boards: Comp
     ...(j.job_apply_link ? [{ url: j.job_apply_link, isDirect: j.job_apply_is_direct ?? false }] : []),
   ];
   const pick = pickApplyUrl(candidates);
+  // Many results only offer LinkedIn/aggregator links, which we never use. The Google Jobs
+  // page still shows you where to apply by hand, so keep it as a last resort.
+  const applyUrl = pick.applyUrl ?? j.job_google_link ?? null;
 
   const boards: CompanyBoard[] = [];
   for (const c of candidates) {
@@ -75,7 +79,7 @@ export function mapJSearchJob(raw: unknown): { listing: JobListing; boards: Comp
       remote: j.job_is_remote ?? null,
       workMode: j.job_is_remote ? "remote" : null,
       description: j.job_description?.trim() || null,
-      applyUrl: pick.applyUrl,
+      applyUrl,
       ats: pick.ats,
       atsBoardToken: pick.boardToken,
       atsJobId: pick.jobId,
@@ -85,6 +89,13 @@ export function mapJSearchJob(raw: unknown): { listing: JobListing; boards: Comp
     },
     boards,
   };
+}
+
+/** Accepts both the old shape (data: [...]) and v2 (data: { jobs: [...] }). */
+export function jsearchJobs(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && Array.isArray((data as { jobs?: unknown }).jobs)) return (data as { jobs: unknown[] }).jobs;
+  return [];
 }
 
 /** JSearch's date_posted only accepts a few values; pick the smallest one that covers maxAgeDays. */
@@ -102,21 +113,21 @@ export async function searchJSearch(
 ): Promise<{ listings: JobListing[]; boards: CompanyBoard[] }> {
   const params = new URLSearchParams({
     query: query.location ? `${query.title} in ${query.location}` : query.title,
-    page: "1",
     num_pages: "1", // each extra page costs another request from the free quota
     country: "us",
     date_posted: datePosted(opts.maxAgeDays),
   });
   if (!query.location) params.set("work_from_home", "true");
 
-  const data = await fetchJson<{ data?: unknown[] }>(`https://jsearch.p.rapidapi.com/search?${params}`, {
+  // /search was removed; /search-v2 returns { data: { jobs: [...], cursor } }.
+  const res = await fetchJson<{ data?: unknown }>(`https://jsearch.p.rapidapi.com/search-v2?${params}`, {
     headers: { "x-rapidapi-key": opts.apiKey, "x-rapidapi-host": "jsearch.p.rapidapi.com" },
     label: "JSearch",
   });
 
   const listings: JobListing[] = [];
   const boards: CompanyBoard[] = [];
-  for (const raw of data.data ?? []) {
+  for (const raw of jsearchJobs(res.data)) {
     const mapped = mapJSearchJob(raw);
     if (!mapped) continue;
     listings.push(mapped.listing);
