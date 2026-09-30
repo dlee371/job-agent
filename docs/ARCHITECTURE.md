@@ -68,6 +68,8 @@ Each change is small, but together they matter a lot at volume.
 | 12 | Resume "about 450 words" | After rendering, code **measures the page height**. If the resume is longer than one page, it drops the lowest-ranked bullets and re-renders. | A guaranteed one-page PDF with no extra Claude call. |
 | 13 | Single package + separate `review-ui/` app | **One package**: Next.js app in `src/app`, pipeline scripts in `src/pipeline`, shared code in `src/lib` | One `package.json`, one `tsconfig`, and the UI and pipeline share the same schemas and DB helpers with no workspace setup. Simpler to maintain. |
 | 14 | Job descriptions go straight into prompts | Job text is wrapped in `<job>` tags, and every prompt says it is data, not instructions | Job postings are untrusted input (prompt injection). |
+| 15 | Save every job a board lists | Board sources (Greenhouse/Lever/Ashby) keep **only jobs whose title matches your targets** before saving | One company can list 700+ jobs. Saving them all would bloat the DB with jobs that are always filtered out. |
+| 16 | Use the job's apply link | For Greenhouse we always build the canonical `job-boards.greenhouse.io/{token}/jobs/{id}` URL | Real data showed `absolute_url` pointing to company sites (e.g. stripe.com) that wrap the form. |
 
 ---
 
@@ -90,6 +92,7 @@ job-agent/
 ├─ output/                    # GITIGNORED — generated files
 │  ├─ resumes/<application-id>.pdf
 │  └─ screenshots/<application-id>-{filled,final}.png
+├─ templates/                # committed examples: profile.example.json, preferences.example.json
 ├─ supabase/
 │  ├─ config.toml             # from `supabase init`
 │  └─ migrations/20260930000000_init.sql
@@ -163,6 +166,8 @@ FIT_SCORE_THRESHOLD=70        # score >= this and no deal breaker → shortliste
 BATCH_MIN_JOBS=20             # score with the Batches API when >= this many jobs are waiting
 MAX_JOB_AGE_DAYS=21           # ignore postings older than this
 MAX_ATTEMPTS=3                # after this many failures an item goes to needs_attention
+SEARCH_MAX_REQUESTS_PER_SOURCE=25   # JSearch's free tier is small; caps requests per source per run
+ADZUNA_COUNTRY=us
 
 # --- runtime ---
 CLAUDE_CONCURRENCY=4          # parallel non-batch Claude calls
@@ -211,6 +216,7 @@ create table jobs (
   company         text not null,
   location        text,
   remote          boolean,
+  work_mode       text,                        -- 'remote' | 'hybrid' | 'onsite' | null (migration 20261001000000)
   description     text,
   apply_url       text,
   ats             text not null default 'other' check (ats in ('greenhouse','lever','ashby','other')),
@@ -527,17 +533,26 @@ interface AtsAdapter {
 }
 ```
 
-Filter rules (`src/filter/rules.ts`, pure functions, unit tested):
+Filter rules (`src/filter/rules.ts`, pure functions, unit tested), in order:
 
-* **Title**: must share the key words of at least one `target_titles` entry (e.g. "software engineer").
-* **Seniority**: reject `senior|sr\.?|staff|principal|lead|manager|director|head of|vp|architect`
-  and level suffixes `II|III|IV` / `2|3` after "engineer".
-* **Location**: matches a `locations` entry, or is remote and `work_modes` includes remote (US-only
-  check for "Remote (US)").
-* **Years**: a description asking for more than `max_years_required` years (from preferences,
-  default 2) → out.
-* **Deal breakers**: keyword match on `deal_breakers`.
-* **Age**: `posted_at` older than `MAX_JOB_AGE_DAYS` → out.
+* **Title**: every key word of at least one `target_titles` entry appears in the job title. Level
+  words (junior, associate, I, new grad…) are ignored, and full-stack/fullstack etc. are unified.
+* **Seniority**: rejects `senior|sr|staff|principal|lead|manager|director|head|vp|architect|chief|intern(ship)`
+  and levels `II|III|IV|2–5`, unless one of your own target titles uses that word.
+* **Location / work mode**: an onsite/hybrid job whose mode isn't in `work_modes` is out. Remote jobs
+  pass when you have a "Remote" location (not when they only list non-US countries). Otherwise the
+  city must match one of `locations`. Placeholders ("N/A", "Hybrid", "In-Office") count as unknown
+  and pass, so Claude judges them from the description.
+* **Age**: `posted_at` older than `MAX_JOB_AGE_DAYS`.
+* **Years**: a *required* (not "preferred") "N+ years of experience" above `max_years_required`.
+* **Salary**: a stated yearly max below `min_salary_usd`.
+* **Deal breakers**: whole-phrase match only. Claude also checks them semantically during scoring.
+
+Duplicates (`src/filter/dedupe.ts`): two jobs are the same if they share the normalized
+`company|title|city` key **or** the exact ATS job id. The copy from the best source wins (company
+board → JSearch with ATS link → JSearch → Adzuna).
+
+`npm run filter -- --recheck` re-evaluates `filtered_out` jobs too, after you change a rule or your preferences.
 
 ---
 
@@ -615,44 +630,25 @@ Set a monthly spend limit in the Anthropic console anyway (the guide's advice).
 `src/schemas/*.ts`. The same schemas are used for Claude output, reading files, and the UI.
 
 ```ts
-// profile.ts — data/profile.json (ids are assigned by code, never by Claude)
+// profile.ts — data/profile.json. Full source: src/schemas/profile.ts; example: templates/profile.example.json
+// Ids are assigned by code (exp1, exp1-b1, proj1-b1, edu1-d1, cert1, summary), never by Claude.
 const Bullet = z.object({ id: z.string(), text: z.string() });
 
 export const Profile = z.object({
-  basics: z.object({
-    name: z.string(), email: z.string().email(), phone: z.string().nullable(),
-    location: z.string().nullable(),
-    links: z.object({ linkedin: z.string().url().nullable(), github: z.string().url().nullable(),
-                      website: z.string().url().nullable() }),
-  }),
-  education: z.array(z.object({
-    id: z.string(), school: z.string(), degree: z.string(), field: z.string().nullable(),
-    start: z.string().nullable(), end: z.string().nullable(), gpa: z.string().nullable(),
-    details: z.array(Bullet),
-  })),
-  experience: z.array(z.object({
-    id: z.string(), company: z.string(), title: z.string(), location: z.string().nullable(),
-    start: z.string(), end: z.string().nullable(),          // null = present
-    bullets: z.array(Bullet),
-  })),
-  projects: z.array(z.object({
-    id: z.string(), name: z.string(), link: z.string().nullable(), dates: z.string().nullable(),
-    tech: z.array(z.string()), bullets: z.array(Bullet),
-  })),
-  skills: z.array(z.string()),                                // flat list, exact spellings
-  certifications: z.array(z.object({ id: z.string(), name: z.string(), date: z.string().nullable() })),
-  standard_answers: z.object({
-    work_authorization: z.string(),                          // "Authorized to work in the US"
-    needs_sponsorship: z.boolean(),
-    earliest_start_date: z.string().nullable(),
-    willing_to_relocate: z.boolean().nullable(),
-    salary_expectation: z.string().nullable(),               // null → left empty + flagged
-    years_of_experience: z.string(),
-    how_did_you_hear: z.string(),                            // "Company careers page"
-    why_interested_template: z.string(),
-    eeo: z.object({ gender: z.string(), race: z.string(), veteran: z.string(), disability: z.string() }),
-  }),
+  basics: { name, email (z.email()), phone|null, location|null, links: { linkedin, github, website } (string|null) },
+  summary: Bullet.nullable(),
+  education:  [{ id, school, degree, field|null, start|null, end|null, gpa|null, details: Bullet[] }],
+  experience: [{ id, company, title, location|null, start|null, end|null /* as written, e.g. "Present" */, bullets: Bullet[] }],
+  projects:   [{ id, name, link|null, dates|null, tech: string[], bullets: Bullet[] }],
+  skills: string[],                                           // flat list, exact spellings
+  certifications: [{ id, name, date|null }],
+  standard_answers: {                                         // every field nullable: null → form field left empty + flagged
+    work_authorization, needs_sponsorship (bool), earliest_start_date, willing_to_relocate (bool),
+    salary_expectation, years_of_experience, how_did_you_hear, why_interested_template,
+    eeo: { gender, race, veteran, disability },
+  },
 });
+// ProfileExtraction (what Claude returns from resume.md) is the same shape without ids or standard_answers.
 
 // preferences.ts — data/preferences.json (the guide's fields + one addition)
 export const Preferences = z.object({

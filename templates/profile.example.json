@@ -1,0 +1,77 @@
+{
+  "basics": {
+    "name": "Alex Sample",
+    "email": "alex.sample@example.com",
+    "phone": "(512) 555-0100",
+    "location": "Austin, TX",
+    "links": {
+      "linkedin": "https://www.linkedin.com/in/alex-sample",
+      "github": "https://github.com/alex-sample",
+      "website": null
+    }
+  },
+  "summary": {
+    "id": "summary",
+    "text": "Computer Science graduate who builds full-stack web apps with TypeScript, React and PostgreSQL."
+  },
+  "education": [
+    {
+      "id": "edu1",
+      "school": "University of Texas at Austin",
+      "degree": "B.S.",
+      "field": "Computer Science",
+      "start": "Aug 2021",
+      "end": "May 2025",
+      "gpa": "3.6",
+      "details": [
+        { "id": "edu1-d1", "text": "Coursework: Data Structures, Operating Systems, Databases, Software Engineering" }
+      ]
+    }
+  ],
+  "experience": [
+    {
+      "id": "exp1",
+      "company": "Example Health",
+      "title": "Software Engineering Intern",
+      "location": "Austin, TX",
+      "start": "Jun 2024",
+      "end": "Aug 2024",
+      "bullets": [
+        { "id": "exp1-b1", "text": "Built a React dashboard that shows appointment wait times for 12 clinics" },
+        { "id": "exp1-b2", "text": "Wrote PostgreSQL queries that cut the report page load time from 8s to 2s" },
+        { "id": "exp1-b3", "text": "Helped migrate 3 internal services from JavaScript to TypeScript" }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj1",
+      "name": "StudyBuddy",
+      "link": "https://github.com/alex-sample/studybuddy",
+      "dates": "2024",
+      "tech": ["Next.js", "Supabase", "Tailwind CSS"],
+      "bullets": [
+        { "id": "proj1-b1", "text": "Built a study-group scheduling app used by 150 students in two semesters" },
+        { "id": "proj1-b2", "text": "Added real-time chat with Supabase Realtime" }
+      ]
+    }
+  ],
+  "skills": ["TypeScript", "JavaScript", "Python", "React", "Next.js", "Node.js", "PostgreSQL", "Git"],
+  "certifications": [],
+  "standard_answers": {
+    "work_authorization": "Authorized to work in the US for any employer",
+    "needs_sponsorship": false,
+    "earliest_start_date": "Immediately",
+    "willing_to_relocate": false,
+    "salary_expectation": null,
+    "years_of_experience": "1",
+    "how_did_you_hear": "Company careers page",
+    "why_interested_template": "I enjoy building full-stack products that people use every day, and this role's focus on {topic} matches the work I've done on {relevant project or internship}.",
+    "eeo": {
+      "gender": "Decline to self-identify",
+      "race": "Decline to self-identify",
+      "veteran": "I am not a protected veteran",
+      "disability": "I don't wish to answer"
+    }
+  }
+}

@@ -26,6 +26,9 @@ const EnvSchema = z.object({
   BATCH_MIN_JOBS: z.coerce.number().int().positive().default(20),
   MAX_JOB_AGE_DAYS: z.coerce.number().int().positive().default(21),
   MAX_ATTEMPTS: z.coerce.number().int().positive().default(3),
+  // Free API tiers are small (JSearch free ≈ 200 requests/month), so cap requests per source per run.
+  SEARCH_MAX_REQUESTS_PER_SOURCE: z.coerce.number().int().positive().default(25),
+  ADZUNA_COUNTRY: z.string().default("us"),
 
   // runtime
   CLAUDE_CONCURRENCY: z.coerce.number().int().positive().default(4),

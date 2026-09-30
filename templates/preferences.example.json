@@ -1,0 +1,10 @@
+{
+  "target_titles": ["Junior Software Engineer", "Software Engineer I", "Full-Stack Developer", "Frontend Engineer"],
+  "interests": ["SaaS", "developer tools", "health tech"],
+  "locations": ["Austin, TX", "Remote (US)"],
+  "max_commute_miles": 30,
+  "work_modes": ["remote", "hybrid"],
+  "min_salary_usd": null,
+  "deal_breakers": ["requires 5+ years", "unpaid", "commission only", "security clearance required"],
+  "max_years_required": 2
+}

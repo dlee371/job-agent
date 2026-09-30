@@ -1,0 +1,14 @@
+[
+  { "name": "Stripe", "ats": "greenhouse", "board_token": "stripe" },
+  { "name": "Figma", "ats": "greenhouse", "board_token": "figma" },
+  { "name": "GitLab", "ats": "greenhouse", "board_token": "gitlab" },
+  { "name": "Duolingo", "ats": "greenhouse", "board_token": "duolingo" },
+  { "name": "Cloudflare", "ats": "greenhouse", "board_token": "cloudflare" },
+  { "name": "Asana", "ats": "greenhouse", "board_token": "asana" },
+  { "name": "Palantir", "ats": "lever", "board_token": "palantir" },
+  { "name": "Spotify", "ats": "lever", "board_token": "spotify" },
+  { "name": "Ramp", "ats": "ashby", "board_token": "ramp" },
+  { "name": "Notion", "ats": "ashby", "board_token": "notion" },
+  { "name": "Linear", "ats": "ashby", "board_token": "linear" },
+  { "name": "Supabase", "ats": "ashby", "board_token": "supabase" }
+]
