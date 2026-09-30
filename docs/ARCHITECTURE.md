@@ -92,7 +92,7 @@ job-agent/
 │  └─ screenshots/<application-id>-{filled,final}.png
 ├─ supabase/
 │  ├─ config.toml             # from `supabase init`
-│  └─ migrations/0001_init.sql
+│  └─ migrations/20260930000000_init.sql
 ├─ src/
 │  ├─ lib/                    # shared by pipeline + UI
 │  │  ├─ env.ts               # reads + validates .env with Zod (fails fast)
@@ -178,7 +178,7 @@ pay for work you won't review), and submitting stops once today's submissions re
 
 ## 5. Database schema
 
-`supabase/migrations/0001_init.sql`. RLS is on for every table with **no policies**, so the anon
+`supabase/migrations/20260930000000_init.sql`. RLS is on for every table with **no policies**, so the anon
 key can read nothing. Our code uses the service-role key, which bypasses RLS, and only in
 server-side code.
 
@@ -875,7 +875,7 @@ Each phase ends with a **"Test it"** checklist. I stop after every phase and wai
 ### Phase 0: Project setup
 Build: `git init` (the `.gitignore` is already in place), `package.json` + TypeScript + `tsx` +
 Vitest + ESLint, Next.js + Tailwind scaffolded into `src/app`, `supabase init` + migration
-`0001_init.sql`, `env.ts`, `db.ts`, `claude.ts` (structured output + `llm_calls` logging),
+the init migration, `env.ts`, `db.ts`, `claude.ts` (structured output + `llm_calls` logging),
 `pricing.ts`, `.env.example`.
 You need: Docker Desktop, the Supabase CLI (`brew install supabase/tap/supabase`), an Anthropic API
 key with a spend limit set.
