@@ -1,0 +1,21 @@
+# secrets and personal data — never commit
+.env
+.env.*
+!.env.example
+data/
+output/
+
+# dependencies / build
+node_modules/
+.next/
+next-env.d.ts
+*.tsbuildinfo
+
+# supabase local state
+supabase/.branches/
+supabase/.temp/
+
+# test / tooling output
+playwright-report/
+test-results/
+.DS_Store
